@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { DayVisualization } from "@/components/DayVisualization"
-import { LifeForm } from "@/components/LifeForm"
+import { EditorForm } from "@/components/EditorForm"
+import { OnboardingForm } from "@/components/OnboardingForm"
 import {
   buildDayCells,
   calculateLifeStats,
@@ -15,26 +16,75 @@ interface SubmittedInput {
   sex: BiologicalSex
 }
 
-export default function App() {
+export const EDITOR_DEBOUNCE_MS = 350
+
+interface AppProps {
+  editorDebounceMs?: number
+}
+
+export default function App({ editorDebounceMs = EDITOR_DEBOUNCE_MS }: AppProps = {}) {
   const [birthDate, setBirthDate] = useState("")
-  const [sex, setSex] = useState<BiologicalSex>("male")
+  const [sex, setSex] = useState<BiologicalSex | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [submittedInput, setSubmittedInput] = useState<SubmittedInput | null>(null)
+  const [activeInput, setActiveInput] = useState<SubmittedInput | null>(null)
+
+  const parsedBirthDate = useMemo(() => parseBirthDate(birthDate), [birthDate])
+  const dateIsValid = parsedBirthDate.ok
 
   const stats = useMemo(() => {
-    if (!submittedInput) {
+    if (!activeInput) {
       return null
     }
 
     return calculateLifeStats({
-      birthDateISO: submittedInput.birthDateISO,
-      sex: submittedInput.sex,
+      birthDateISO: activeInput.birthDateISO,
+      sex: activeInput.sex,
       todayISO: getTodayISO(),
       model: "fixed-365",
     })
-  }, [submittedInput])
+  }, [activeInput])
 
   const cells = useMemo(() => (stats ? buildDayCells(stats) : []), [stats])
+
+  const hasActiveInput = Boolean(activeInput)
+
+  useEffect(() => {
+    if (!hasActiveInput) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const parsed = parseBirthDate(birthDate)
+
+      if (!parsed.ok) {
+        setError(parsed.message)
+        return
+      }
+
+      if (!sex) {
+        return
+      }
+
+      setError(null)
+      setActiveInput((current) => {
+        if (current?.birthDateISO === parsed.iso && current.sex === sex) {
+          return current
+        }
+
+        return { birthDateISO: parsed.iso, sex }
+      })
+    }, editorDebounceMs)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [birthDate, editorDebounceMs, hasActiveInput, sex])
+
+  function handleBirthDateChange(value: string) {
+    setBirthDate(value)
+
+    if (!activeInput) {
+      setError(null)
+    }
+  }
 
   function handleSubmit() {
     const parsed = parseBirthDate(birthDate)
@@ -44,22 +94,36 @@ export default function App() {
       return
     }
 
+    if (!sex) {
+      return
+    }
+
     setError(null)
-    setSubmittedInput({ birthDateISO: parsed.iso, sex })
+    setActiveInput({ birthDateISO: parsed.iso, sex })
   }
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <div className="absolute inset-0 app-gradient" aria-hidden="true" />
-      <LifeForm
+      <OnboardingForm
         birthDate={birthDate}
         sex={sex}
-        error={error}
-        submitted={Boolean(submittedInput)}
-        onBirthDateChange={setBirthDate}
+        error={activeInput ? null : error}
+        dateIsValid={dateIsValid}
+        submitted={Boolean(activeInput)}
+        onBirthDateChange={handleBirthDateChange}
         onSexChange={setSex}
         onSubmit={handleSubmit}
       />
+      {activeInput ? (
+        <EditorForm
+          birthDate={birthDate}
+          sex={sex ?? activeInput.sex}
+          error={error}
+          onBirthDateChange={handleBirthDateChange}
+          onSexChange={setSex}
+        />
+      ) : null}
       {stats ? <DayVisualization cells={cells} stats={stats} /> : null}
     </main>
   )

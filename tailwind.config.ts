@@ -62,9 +62,14 @@ const config = {
           "0%": { opacity: "0", transform: "translateY(10px) scale(0.985)" },
           "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
         },
+        "question-reveal": {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "grid-reveal": "grid-reveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "question-reveal": "question-reveal 360ms cubic-bezier(0.22, 1, 0.36, 1) both",
       },
     },
   },

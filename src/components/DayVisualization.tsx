@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react"
 import * as d3 from "d3"
 
 import { DAYS_PER_YEAR, type DayCell, type LifeStats } from "@/lib/life"
@@ -21,6 +27,7 @@ const GAP_X = 0.55
 const GAP_Y = 1.8
 const CELL_STEP_X = CELL_WIDTH + GAP_X
 const CELL_STEP_Y = CELL_HEIGHT + GAP_Y
+const PAST_CELL_PATTERN_ID = "past-cell-crosshatch"
 
 export function DayVisualization({ cells, stats }: DayVisualizationProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -38,7 +45,6 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
 
   useEffect(() => {
     const svg = d3.select(svgRef.current)
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
     svg.attr("viewBox", `0 0 ${dimensions.width} ${dimensions.height}`)
 
@@ -52,19 +58,7 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
           enter
             .append("rect")
             .attr("class", "day-cell")
-            .attr("x", (cell) => cell.column * CELL_STEP_X)
-            .attr("y", (cell) => cell.row * CELL_STEP_Y)
-            .attr("width", CELL_WIDTH)
-            .attr("height", CELL_HEIGHT)
-            .attr("rx", 0.28)
-            .attr("opacity", 0)
-            .call((selection) =>
-              selection
-                .transition()
-                .duration(reducedMotion ? 0 : 520)
-                .delay((_, index) => (reducedMotion ? 0 : Math.min(index * 0.18, 520)))
-                .attr("opacity", 1),
-            ),
+            .attr("rx", 0.28),
         (update) => update,
         (exit) => exit.remove(),
       )
@@ -74,51 +68,35 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
       .attr("height", CELL_HEIGHT)
       .attr("data-date", (cell) => cell.dateISO)
       .attr("data-status", (cell) => cell.status)
-      .attr("fill", (cell) => {
-        if (cell.status === "past") {
-          return "hsl(var(--life-past))"
-        }
-
-        if (cell.status === "today") {
-          return "hsl(var(--life-today))"
-        }
-
-        return "hsl(var(--life-future))"
-      })
-      .attr("stroke", (cell) =>
-        cell.status === "today"
-          ? "hsl(var(--life-today-border))"
-          : "hsl(var(--life-cell-border))",
-      )
-      .attr("stroke-width", (cell) => (cell.status === "today" ? 0.42 : 0.24))
-      .on("pointerenter pointermove", (event, cell) => {
-        const bounds = wrapRef.current?.getBoundingClientRect()
-
-        if (!bounds) {
-          return
-        }
-
-        setHoveredCell({
-          dateISO: cell.dateISO,
-          x: event.clientX - bounds.left,
-          y: event.clientY - bounds.top,
-        })
-      })
-      .on("pointerleave", () => setHoveredCell(null))
-
-    root
-      .selectAll<SVGPathElement, DayCell>("path.past-crosses")
-      .data([cells.filter((cell) => cell.status === "past")])
-      .join("path")
-      .attr("class", "past-crosses")
-      .attr("d", getPastCrossPath)
-      .attr("fill", "none")
-      .attr("stroke", "hsl(var(--life-cross))")
-      .attr("stroke-width", 0.12)
-      .attr("stroke-linecap", "round")
-      .attr("opacity", 0.55)
-      .attr("pointer-events", "none")
+      .attr("fill", getCellFill)
+      .attr("stroke", getCellStroke)
+      .attr("stroke-width", getCellStrokeWidth)
+      .attr("opacity", getCellOpacity)
+      .on("pointerenter pointermove pointerleave", null)
   }, [cells, dimensions.height, dimensions.width])
+
+  function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
+    const target = event.target
+
+    if (!(target instanceof SVGElement)) {
+      return
+    }
+
+    const cell = target.closest<SVGRectElement>("rect.day-cell")
+    const bounds = wrapRef.current?.getBoundingClientRect()
+    const dateISO = cell?.dataset.date
+
+    if (!cell || !bounds || !dateISO) {
+      setHoveredCell(null)
+      return
+    }
+
+    setHoveredCell({
+      dateISO,
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    })
+  }
 
   return (
     <div
@@ -134,10 +112,36 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
       >
         <svg
           ref={svgRef}
+          data-testid="day-grid-svg"
           className="size-full overflow-visible"
           role="img"
           aria-label={`Life visualization with ${stats.totalDays.toLocaleString()} day cells.`}
+          onPointerMove={handlePointerMove}
+          onPointerLeave={() => setHoveredCell(null)}
         >
+          <defs>
+            <pattern
+              id={PAST_CELL_PATTERN_ID}
+              data-testid={PAST_CELL_PATTERN_ID}
+              patternUnits="userSpaceOnUse"
+              width={CELL_STEP_X}
+              height={CELL_STEP_Y}
+            >
+              <rect
+                width={CELL_WIDTH}
+                height={CELL_HEIGHT}
+                rx={0.28}
+                fill="hsl(var(--life-past))"
+              />
+              <path
+                d={`M0,0L${CELL_WIDTH},${CELL_HEIGHT}M${CELL_WIDTH},0L0,${CELL_HEIGHT}`}
+                fill="none"
+                stroke="hsl(var(--life-past-cross))"
+                strokeLinecap="round"
+                strokeWidth={0.12}
+              />
+            </pattern>
+          </defs>
           <g className="day-grid" />
         </svg>
         {hoveredCell ? (
@@ -157,15 +161,42 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
   )
 }
 
-function getPastCrossPath(cells: DayCell[]): string {
-  return cells
-    .map((cell) => {
-      const x = cell.column * CELL_STEP_X
-      const y = cell.row * CELL_STEP_Y
-      const x2 = x + CELL_WIDTH
-      const y2 = y + CELL_HEIGHT
+function getCellFill(cell: DayCell): string {
+  if (cell.status === "past") {
+    return `url(#${PAST_CELL_PATTERN_ID})`
+  }
 
-      return `M${x.toFixed(2)},${y.toFixed(2)}L${x2.toFixed(2)},${y2.toFixed(2)}M${x2.toFixed(2)},${y.toFixed(2)}L${x.toFixed(2)},${y2.toFixed(2)}`
-    })
-    .join("")
+  if (cell.status === "today") {
+    return "hsl(var(--life-today))"
+  }
+
+  return "hsl(var(--life-future))"
+}
+
+function getCellStroke(cell: DayCell): string {
+  if (cell.status === "past") {
+    return "hsl(var(--life-past-border))"
+  }
+
+  if (cell.status === "today") {
+    return "hsl(var(--life-today-border))"
+  }
+
+  return "hsl(var(--life-future-border))"
+}
+
+function getCellStrokeWidth(cell: DayCell): number {
+  if (cell.status === "today") {
+    return 0.62
+  }
+
+  if (cell.status === "future") {
+    return 0.32
+  }
+
+  return 0.18
+}
+
+function getCellOpacity(cell: DayCell): number {
+  return cell.status === "past" ? 0.72 : 1
 }

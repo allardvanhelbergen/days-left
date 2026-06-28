@@ -24,12 +24,13 @@
     --input: 36 9% 72%;
     --ring: 35 6% 36%;
     --radius: 0.375rem;
-    --life-past: 35 10% 79%;
-    --life-future: 42 19% 98%;
-    --life-today: 39 22% 93%;
-    --life-cell-border: 34 7% 59%;
-    --life-today-border: 33 6% 27%;
-    --life-cross: 34 7% 48%;
+    --life-past: 36 8% 86%;
+    --life-past-border: 36 6% 76%;
+    --life-past-cross: 36 6% 70%;
+    --life-future: 40 28% 99%;
+    --life-future-border: 35 9% 44%;
+    --life-today: 35 8% 20%;
+    --life-today-border: 35 8% 12%;
   }
 
   * {
