@@ -2,12 +2,19 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type PointerEvent,
 } from "react"
-import * as d3 from "d3"
 
-import { DAYS_PER_YEAR, type DayCell, type LifeStats } from "@/lib/life"
+import {
+  createDayGridPalette,
+  drawDayGrid,
+  getDayCellAtGridPoint,
+  getDayCellRect,
+  getDayGridDimensions,
+  type DayGridDimensions,
+  type DayGridRect,
+} from "@/components/day-grid-rendering"
+import type { DayCell, LifeStats } from "@/lib/life"
 import { cn } from "@/lib/utils"
 
 interface DayVisualizationProps {
@@ -15,162 +22,243 @@ interface DayVisualizationProps {
   stats: LifeStats
 }
 
-interface HoveredCell {
-  dateISO: string
-  x: number
-  y: number
+interface HoverGeometry {
+  canvasOffsetX: number
+  canvasOffsetY: number
+  canvasWidth: number
+  canvasHeight: number
+  scaleX: number
+  scaleY: number
 }
 
-const CELL_WIDTH = 1
-const CELL_HEIGHT = 5.8
-const GAP_X = 0.55
-const GAP_Y = 1.8
-const CELL_STEP_X = CELL_WIDTH + GAP_X
-const CELL_STEP_Y = CELL_HEIGHT + GAP_Y
-const PAST_CELL_PATTERN_ID = "past-cell-crosshatch"
-const TOOLTIP_DELAY_MS = 120
+interface HoverRender {
+  cell: DayCell
+  overlayX: number
+  overlayY: number
+  overlayWidth: number
+  overlayHeight: number
+  tooltipX: number
+  tooltipY: number
+}
+
+const statusLegendItems = [
+  {
+    label: "Past",
+    className: "bg-[hsl(var(--life-past))] opacity-70",
+  },
+  {
+    label: "Future",
+    className: "bg-[hsl(var(--life-future))] shadow-[0_0_0_1px_hsl(var(--border)/0.18)]",
+  },
+  {
+    label: "Today",
+    className: "bg-[hsl(var(--life-today))]",
+  },
+] as const
 
 export function DayVisualization({ cells, stats }: DayVisualizationProps) {
-  const svgRef = useRef<SVGSVGElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
-  const hoverOverlayRef = useRef<SVGRectElement | null>(null)
+  const hoverOverlayRef = useRef<HTMLDivElement | null>(null)
   const tooltipRef = useRef<HTMLDivElement | null>(null)
-  const activeDateRef = useRef<string | null>(null)
-  const pendingTooltipRef = useRef<HoveredCell | null>(null)
-  const tooltipPositionRef = useRef({ x: 0, y: 0 })
-  const tooltipTimeoutRef = useRef<number | null>(null)
-  const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
+  const hoverGeometryRef = useRef<HoverGeometry | null>(null)
+  const activeCellIndexRef = useRef<number | null>(null)
+  const pendingHoverRef = useRef<HoverRender | null>(null)
+  const hoverFrameRef = useRef<number | null>(null)
 
-  const dimensions = useMemo(() => {
-    return {
-      width: DAYS_PER_YEAR * CELL_WIDTH + (DAYS_PER_YEAR - 1) * GAP_X,
-      height:
-        stats.expectancyYears * CELL_HEIGHT +
-        (stats.expectancyYears - 1) * GAP_Y,
-    }
-  }, [stats.expectancyYears])
+  const dimensions = useMemo(
+    () => getDayGridDimensions(stats.expectancyYears),
+    [stats.expectancyYears],
+  )
 
   useEffect(() => {
-    const svg = d3.select(svgRef.current)
+    const canvas = canvasRef.current
 
-    svg.attr("viewBox", `0 0 ${dimensions.width} ${dimensions.height}`)
-
-    const root = svg.select<SVGGElement>("g.day-grid")
-
-    root
-      .selectAll<SVGRectElement, DayCell>("rect.day-cell")
-      .data(cells, (cell) => cell.index)
-      .join(
-        (enter) =>
-          enter
-            .append("rect")
-            .attr("class", "day-cell")
-            .attr("rx", 0.28),
-        (update) => update,
-        (exit) => exit.remove(),
-      )
-      .attr("x", (cell) => cell.column * CELL_STEP_X)
-      .attr("y", (cell) => cell.row * CELL_STEP_Y)
-      .attr("width", CELL_WIDTH)
-      .attr("height", CELL_HEIGHT)
-      .attr("data-date", (cell) => cell.dateISO)
-      .attr("data-status", (cell) => cell.status)
-      .attr("fill", getCellFill)
-      .attr("stroke", getCellStroke)
-      .attr("stroke-width", getCellStrokeWidth)
-      .attr("opacity", getCellOpacity)
-      .on("pointerenter pointermove pointerleave", null)
-  }, [cells, dimensions.height, dimensions.width])
-
-  useEffect(() => {
-    return () => clearTooltipTimeout()
-  }, [])
-
-  function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
-    const target = event.target
-
-    if (!(target instanceof SVGElement)) {
+    if (!canvas) {
       return
     }
 
-    const cell = target.closest<SVGRectElement>("rect.day-cell")
-    const bounds = wrapRef.current?.getBoundingClientRect()
-    const dateISO = cell?.dataset.date
+    drawCanvas(canvas, cells, dimensions)
 
-    if (!cell || !bounds || !dateISO) {
+    let frameId: number | null = null
+    const scheduleDraw = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        drawCanvas(canvas, cells, dimensions)
+      })
+    }
+
+    const observer = new ResizeObserver(scheduleDraw)
+    observer.observe(canvas)
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      observer.disconnect()
+    }
+  }, [cells, dimensions])
+
+  useEffect(() => {
+    return () => cancelHoverFrame()
+  }, [])
+
+  function handlePointerEnter(event: PointerEvent<HTMLCanvasElement>) {
+    cacheHoverGeometry(event.currentTarget)
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    const geometry =
+      hoverGeometryRef.current ?? cacheHoverGeometry(event.currentTarget)
+
+    if (!geometry) {
       clearHoverState()
       return
     }
 
-    moveHoverOverlay(cell)
-    updateTooltipPosition({
-      dateISO,
-      x: event.clientX - bounds.left,
-      y: event.clientY - bounds.top,
+    const gridPoint = {
+      x: (event.clientX - geometry.canvasOffsetX) * geometry.scaleX,
+      y: (event.clientY - geometry.canvasOffsetY) * geometry.scaleY,
+    }
+    const cell = getDayCellAtGridPoint(gridPoint, cells)
+
+    if (!cell) {
+      clearHoverState()
+      return
+    }
+
+    if (activeCellIndexRef.current === cell.index) {
+      return
+    }
+
+    activeCellIndexRef.current = cell.index
+    scheduleHoverRender(createHoverRender(cell, geometry))
+  }
+
+  function cacheHoverGeometry(canvas: HTMLCanvasElement): HoverGeometry | null {
+    const canvasBounds = canvas.getBoundingClientRect()
+    const wrapBounds = wrapRef.current?.getBoundingClientRect()
+
+    if (canvasBounds.width <= 0 || canvasBounds.height <= 0) {
+      hoverGeometryRef.current = null
+      return null
+    }
+
+    const geometry = {
+      canvasOffsetX: canvasBounds.left,
+      canvasOffsetY: canvasBounds.top,
+      canvasWidth: canvasBounds.width,
+      canvasHeight: canvasBounds.height,
+      scaleX: dimensions.width / canvasBounds.width,
+      scaleY: dimensions.height / canvasBounds.height,
+      wrapOffsetX: canvasBounds.left - (wrapBounds?.left ?? canvasBounds.left),
+      wrapOffsetY: canvasBounds.top - (wrapBounds?.top ?? canvasBounds.top),
+    }
+
+    hoverGeometryRef.current = geometry
+    return geometry
+  }
+
+  function createHoverRender(
+    cell: DayCell,
+    geometry: HoverGeometry,
+  ): HoverRender {
+    const rect = getDayCellRect(cell)
+    const overlayX = (rect.x / dimensions.width) * geometry.canvasWidth
+    const overlayY = (rect.y / dimensions.height) * geometry.canvasHeight
+    const overlayWidth = (rect.width / dimensions.width) * geometry.canvasWidth
+    const overlayHeight =
+      (rect.height / dimensions.height) * geometry.canvasHeight
+
+    return {
+      cell,
+      overlayX,
+      overlayY,
+      overlayWidth,
+      overlayHeight,
+      tooltipX: overlayX + overlayWidth / 2,
+      tooltipY: overlayY,
+    }
+  }
+
+  function scheduleHoverRender(nextRender: HoverRender) {
+    pendingHoverRef.current = nextRender
+
+    if (hoverFrameRef.current !== null) {
+      return
+    }
+
+    hoverFrameRef.current = window.requestAnimationFrame(() => {
+      hoverFrameRef.current = null
+      flushHoverRender()
     })
   }
 
-  function moveHoverOverlay(cell: SVGRectElement) {
+  function flushHoverRender() {
+    const nextRender = pendingHoverRef.current
+
+    if (!nextRender) {
+      return
+    }
+
+    updateHoverOverlay(nextRender)
+    updateTooltip(nextRender)
+  }
+
+  function updateHoverOverlay(nextRender: HoverRender) {
     const hoverOverlay = hoverOverlayRef.current
 
     if (!hoverOverlay) {
       return
     }
 
-    hoverOverlay.setAttribute("x", cell.getAttribute("x") ?? "0")
-    hoverOverlay.setAttribute("y", cell.getAttribute("y") ?? "0")
-    hoverOverlay.setAttribute("width", cell.getAttribute("width") ?? `${CELL_WIDTH}`)
-    hoverOverlay.setAttribute("height", cell.getAttribute("height") ?? `${CELL_HEIGHT}`)
-    hoverOverlay.setAttribute("visibility", "visible")
+    hoverOverlay.style.width = `${nextRender.overlayWidth}px`
+    hoverOverlay.style.height = `${nextRender.overlayHeight}px`
+    hoverOverlay.style.transform = `translate3d(${nextRender.overlayX}px, ${nextRender.overlayY}px, 0)`
+    hoverOverlay.dataset.visible = "true"
   }
 
-  function updateTooltipPosition(nextHoveredCell: HoveredCell) {
-    tooltipPositionRef.current = {
-      x: nextHoveredCell.x,
-      y: nextHoveredCell.y,
-    }
+  function updateTooltip(nextRender: HoverRender) {
+    const tooltip = tooltipRef.current
 
-    if (tooltipRef.current) {
-      tooltipRef.current.style.left = `${nextHoveredCell.x}px`
-      tooltipRef.current.style.top = `${nextHoveredCell.y}px`
-    }
-
-    scheduleTooltip(nextHoveredCell)
-  }
-
-  function scheduleTooltip(nextHoveredCell: HoveredCell) {
-    pendingTooltipRef.current = nextHoveredCell
-
-    if (hoveredCell?.dateISO === nextHoveredCell.dateISO) {
-      setHoveredCell(nextHoveredCell)
+    if (!tooltip) {
       return
     }
 
-    if (activeDateRef.current === nextHoveredCell.dateISO) {
-      return
-    }
-
-    clearTooltipTimeout()
-    activeDateRef.current = nextHoveredCell.dateISO
-    tooltipTimeoutRef.current = window.setTimeout(() => {
-      setHoveredCell(pendingTooltipRef.current)
-      tooltipTimeoutRef.current = null
-    }, TOOLTIP_DELAY_MS)
+    tooltip.textContent = nextRender.cell.dateISO
+    tooltip.style.transform = `translate3d(${nextRender.tooltipX}px, ${nextRender.tooltipY}px, 0) translate(-50%, calc(-100% - 0.75rem))`
+    tooltip.dataset.visible = "true"
+    tooltip.setAttribute("aria-hidden", "false")
   }
 
-  function clearTooltipTimeout() {
-    if (tooltipTimeoutRef.current) {
-      window.clearTimeout(tooltipTimeoutRef.current)
-      tooltipTimeoutRef.current = null
+  function cancelHoverFrame() {
+    if (hoverFrameRef.current !== null) {
+      window.cancelAnimationFrame(hoverFrameRef.current)
+      hoverFrameRef.current = null
     }
   }
 
   function clearHoverState() {
-    clearTooltipTimeout()
-    hoverOverlayRef.current?.setAttribute("visibility", "hidden")
-    activeDateRef.current = null
-    pendingTooltipRef.current = null
-    setHoveredCell(null)
+    cancelHoverFrame()
+
+    if (hoverOverlayRef.current) {
+      hoverOverlayRef.current.dataset.visible = "false"
+    }
+
+    if (tooltipRef.current) {
+      tooltipRef.current.dataset.visible = "false"
+      tooltipRef.current.setAttribute("aria-hidden", "true")
+      tooltipRef.current.textContent = ""
+    }
+
+    activeCellIndexRef.current = null
+    pendingHoverRef.current = null
+    hoverGeometryRef.current = null
   }
 
   return (
@@ -181,113 +269,87 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
       )}
     >
       <div
+        data-testid="day-status-legend"
+        aria-label="Day cell status legend"
+        className="pointer-events-none absolute bottom-5 left-5 z-10 flex flex-col gap-2 text-sm font-medium text-foreground/90 sm:bottom-8 sm:left-8"
+      >
+        {statusLegendItems.map((item) => (
+          <div key={item.label} className="flex items-center gap-3">
+            <span
+              data-testid="day-status-swatch"
+              className={cn("block size-4 rounded-[3px]", item.className)}
+              aria-hidden="true"
+            />
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+      <div
         ref={wrapRef}
         className="relative max-h-[72vh] w-[min(88vw,40rem)] min-w-[18rem] sm:max-h-[82vh] sm:w-[min(56vw,42rem)]"
         style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
       >
-        <svg
-          ref={svgRef}
-          data-testid="day-grid-svg"
-          className="size-full overflow-visible"
+        <canvas
+          ref={canvasRef}
+          data-testid="day-grid-canvas"
+          className="block size-full"
           role="img"
           aria-label={`Life visualization with ${stats.totalDays.toLocaleString()} day cells.`}
+          onPointerEnter={handlePointerEnter}
           onPointerMove={handlePointerMove}
           onPointerLeave={clearHoverState}
-        >
-          <defs>
-            <pattern
-              id={PAST_CELL_PATTERN_ID}
-              data-testid={PAST_CELL_PATTERN_ID}
-              patternUnits="userSpaceOnUse"
-              width={CELL_STEP_X}
-              height={CELL_STEP_Y}
-            >
-              <rect
-                width={CELL_WIDTH}
-                height={CELL_HEIGHT}
-                rx={0.28}
-                fill="hsl(var(--life-past))"
-              />
-              <path
-                d={`M0,0L${CELL_WIDTH},${CELL_HEIGHT}M${CELL_WIDTH},0L0,${CELL_HEIGHT}`}
-                fill="none"
-                stroke="hsl(var(--life-past-cross))"
-                strokeLinecap="round"
-                strokeWidth={0.12}
-              />
-            </pattern>
-          </defs>
-          <g className="day-grid" />
-          <rect
-            ref={hoverOverlayRef}
-            data-testid="day-cell-hover"
-            className="day-cell-hover"
-            x={0}
-            y={0}
-            width={CELL_WIDTH}
-            height={CELL_HEIGHT}
-            rx={0.28}
-            visibility="hidden"
-            fill="hsl(var(--popover) / 0.36)"
-            stroke="hsl(var(--life-today-border))"
-            strokeWidth={0.9}
-            pointerEvents="none"
-          />
-        </svg>
-        {hoveredCell ? (
-          <div
-            ref={tooltipRef}
-            className="pointer-events-none absolute animate-tooltip-reveal rounded-md border border-border/80 bg-popover/95 px-3 py-2 text-sm text-popover-foreground shadow-[0_14px_30px_hsl(var(--ring)/0.18),0_0_0_1px_hsl(var(--border)/0.36)]"
-            style={{
-              left: tooltipPositionRef.current.x,
-              top: tooltipPositionRef.current.y,
-              transform: "translate(-50%, calc(-100% - 0.75rem))",
-            }}
-          >
-            {hoveredCell.dateISO}
-          </div>
-        ) : null}
+        />
+        <div
+          ref={hoverOverlayRef}
+          data-testid="day-cell-hover"
+          data-visible="false"
+          className="pointer-events-none absolute left-0 top-0 rounded-[1px] border border-[hsl(var(--life-today-border))] bg-popover/35 opacity-0 shadow-[0_0_0_1px_hsl(var(--popover)/0.7)] transition-opacity duration-75 will-change-transform data-[visible=true]:opacity-100"
+        />
+        <div
+          ref={tooltipRef}
+          data-testid="day-cell-tooltip"
+          data-visible="false"
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-0 rounded-md border border-border/80 bg-popover/95 px-3 py-2 text-sm text-popover-foreground opacity-0 shadow-[0_10px_22px_hsl(var(--ring)/0.14),0_0_0_1px_hsl(var(--border)/0.36)] transition-opacity duration-75 will-change-transform data-[visible=true]:opacity-100"
+        />
       </div>
     </div>
   )
 }
 
-function getCellFill(cell: DayCell): string {
-  if (cell.status === "past") {
-    return `url(#${PAST_CELL_PATTERN_ID})`
+function drawCanvas(
+  canvas: HTMLCanvasElement,
+  cells: DayCell[],
+  dimensions: DayGridDimensions,
+) {
+  const context = canvas.getContext("2d")
+
+  if (!context) {
+    return
   }
 
-  if (cell.status === "today") {
-    return "hsl(var(--life-today))"
+  const bounds = canvas.getBoundingClientRect()
+  const cssWidth = bounds.width || dimensions.width
+  const cssHeight = bounds.height || dimensions.height
+  const devicePixelRatio = window.devicePixelRatio || 1
+  const nextWidth = Math.max(1, Math.round(cssWidth * devicePixelRatio))
+  const nextHeight = Math.max(1, Math.round(cssHeight * devicePixelRatio))
+
+  if (canvas.width !== nextWidth) {
+    canvas.width = nextWidth
   }
 
-  return "hsl(var(--life-future))"
-}
-
-function getCellStroke(cell: DayCell): string {
-  if (cell.status === "past") {
-    return "hsl(var(--life-past-border))"
+  if (canvas.height !== nextHeight) {
+    canvas.height = nextHeight
   }
 
-  if (cell.status === "today") {
-    return "hsl(var(--life-today-border))"
-  }
-
-  return "hsl(var(--life-future-border))"
-}
-
-function getCellStrokeWidth(cell: DayCell): number {
-  if (cell.status === "today") {
-    return 0.62
-  }
-
-  if (cell.status === "future") {
-    return 0.32
-  }
-
-  return 0.18
-}
-
-function getCellOpacity(cell: DayCell): number {
-  return cell.status === "past" ? 0.72 : 1
+  context.setTransform(
+    (cssWidth / dimensions.width) * devicePixelRatio,
+    0,
+    0,
+    (cssHeight / dimensions.height) * devicePixelRatio,
+    0,
+    0,
+  )
+  drawDayGrid(context, cells, dimensions, createDayGridPalette(canvas))
 }

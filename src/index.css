@@ -25,10 +25,7 @@
     --ring: 35 6% 36%;
     --radius: 0.375rem;
     --life-past: 36 8% 86%;
-    --life-past-border: 36 6% 76%;
-    --life-past-cross: 36 6% 70%;
     --life-future: 40 28% 99%;
-    --life-future-border: 35 9% 44%;
     --life-today: 35 8% 20%;
     --life-today-border: 35 8% 12%;
   }
@@ -57,15 +54,6 @@
     background:
       linear-gradient(125deg, hsl(39 23% 92%) 0%, hsl(36 17% 88%) 44%, hsl(39 22% 95%) 100%),
       linear-gradient(25deg, hsl(35 10% 78% / 0.4), transparent 60%);
-  }
-
-  .day-cell {
-    shape-rendering: crispEdges;
-  }
-
-  .day-cell-hover {
-    pointer-events: none;
-    shape-rendering: crispEdges;
   }
 
   .life-radio-option {

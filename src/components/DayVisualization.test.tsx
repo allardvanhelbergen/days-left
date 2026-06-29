@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { readFileSync } from "node:fs"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { DayVisualization } from "@/components/DayVisualization"
+import { DAY_GRID, getDayGridDimensions } from "@/components/day-grid-rendering"
 import type { DayCell, LifeStats } from "@/lib/life"
 
 const cells: DayCell[] = [
@@ -41,86 +41,150 @@ const stats: LifeStats = {
 }
 
 describe("DayVisualization", () => {
-  it("keeps day-cell CSS static and cheap for large grids", () => {
-    const css = readFileSync("src/index.css", "utf8")
-    const dayCellRule = css.match(/\.day-cell\s*\{(?<body>[^}]+)\}/)?.groups?.body
-
-    expect(dayCellRule).toBeDefined()
-    expect(dayCellRule).not.toContain("transition")
-    expect(dayCellRule).not.toContain("filter")
-    expect(dayCellRule).not.toContain("transform")
-  })
-
-  it("renders cells at final opacity without a per-cell reveal setup", async () => {
+  it("renders a single canvas grid without per-day DOM nodes", () => {
     render(<DayVisualization cells={cells} stats={stats} />)
 
-    await waitFor(() => {
-      expect(document.querySelectorAll("rect.day-cell")).toHaveLength(cells.length)
-    })
-
-    for (const cell of document.querySelectorAll("rect.day-cell")) {
-      expect(cell).not.toHaveAttribute("opacity", "0")
-    }
+    expect(screen.getByTestId("day-grid-canvas")).toBeInTheDocument()
+    expect(screen.getByTestId("day-cell-hover")).toBeInTheDocument()
+    expect(document.querySelectorAll("rect.day-cell")).toHaveLength(0)
   })
 
-  it("uses lower-prominence past styling and stronger future/today styling", async () => {
+  it("keeps one hidden tooltip mounted before hover", () => {
     render(<DayVisualization cells={cells} stats={stats} />)
 
-    await waitFor(() => {
-      expect(document.querySelectorAll("rect.day-cell")).toHaveLength(cells.length)
-    })
+    const tooltip = screen.getByTestId("day-cell-tooltip")
 
-    const pastCell = document.querySelector('rect[data-status="past"]')
-    const todayCell = document.querySelector('rect[data-status="today"]')
-    const futureCell = document.querySelector('rect[data-status="future"]')
-
-    expect(screen.getByTestId("past-cell-crosshatch")).toBeInTheDocument()
-    expect(document.querySelector("path.past-crosses")).not.toBeInTheDocument()
-    expect(pastCell).toHaveAttribute("fill", "url(#past-cell-crosshatch)")
-    expect(pastCell).toHaveAttribute("stroke", "hsl(var(--life-past-border))")
-    expect(pastCell).toHaveAttribute("opacity", "0.72")
-    expect(futureCell).toHaveAttribute("fill", "hsl(var(--life-future))")
-    expect(futureCell).toHaveAttribute("stroke", "hsl(var(--life-future-border))")
-    expect(futureCell).toHaveAttribute("opacity", "1")
-    expect(todayCell).toHaveAttribute("fill", "hsl(var(--life-today))")
-    expect(todayCell).toHaveAttribute("stroke", "hsl(var(--life-today-border))")
-    expect(todayCell).toHaveAttribute("opacity", "1")
+    expect(tooltip).toHaveAttribute("data-visible", "false")
+    expect(tooltip).toHaveAttribute("aria-hidden", "true")
+    expect(tooltip).toHaveTextContent("")
   })
 
-  it("shows a delayed tooltip and clears it through delegated SVG hover handling", async () => {
+  it("renders a compact status legend for the filled day cells", () => {
     render(<DayVisualization cells={cells} stats={stats} />)
 
-    await waitFor(() => {
-      expect(document.querySelectorAll("rect.day-cell")).toHaveLength(cells.length)
-    })
+    const legend = screen.getByTestId("day-status-legend")
 
-    vi.useFakeTimers()
+    expect(legend).toHaveTextContent("Past")
+    expect(legend).toHaveTextContent("Future")
+    expect(legend).toHaveTextContent("Today")
+    expect(legend.querySelectorAll("[data-testid='day-status-swatch']")).toHaveLength(3)
+    expect(document.querySelectorAll("rect.day-cell")).toHaveLength(0)
+  })
 
-    const futureCell = document.querySelector('rect[data-date="2000-01-03"]')
+  it("shows an immediate transform-positioned tooltip through math-based canvas hover handling", async () => {
+    render(<DayVisualization cells={cells} stats={stats} />)
+
+    const canvas = screen.getByTestId("day-grid-canvas")
     const hoverOverlay = screen.getByTestId("day-cell-hover")
-    expect(futureCell).not.toBeNull()
-    expect(hoverOverlay).toHaveAttribute("visibility", "hidden")
-
-    fireEvent.pointerMove(futureCell as Element, {
-      clientX: 120,
-      clientY: 140,
+    const tooltip = screen.getByTestId("day-cell-tooltip")
+    const dimensions = getDayGridDimensions(stats.expectancyYears)
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      x: 100,
+      y: 100,
+      left: 100,
+      top: 100,
+      right: 100 + dimensions.width,
+      bottom: 100 + DAY_GRID.cellHeight,
+      width: dimensions.width,
+      height: DAY_GRID.cellHeight,
+      toJSON: () => {},
     })
 
-    expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
-    expect(futureCell).not.toHaveAttribute("data-hovered", "true")
-    expect(hoverOverlay).toHaveAttribute("visibility", "visible")
-    expect(hoverOverlay).toHaveAttribute("x", "3.1")
-    expect(hoverOverlay).toHaveAttribute("y", "0")
+    expect(hoverOverlay).toHaveAttribute("data-visible", "false")
+    expect(tooltip).toHaveAttribute("data-visible", "false")
 
-    act(() => vi.advanceTimersByTime(119))
-    expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
+    fireEvent.pointerEnter(canvas)
 
-    act(() => vi.advanceTimersByTime(1))
-    expect(screen.getByText("2000-01-03")).toBeInTheDocument()
+    fireEvent.pointerMove(canvas, {
+      clientX: 100 + DAY_GRID.cellStepX * 2 + 0.5,
+      clientY: 101,
+    })
 
-    fireEvent.pointerLeave(screen.getByTestId("day-grid-svg"))
+    await waitFor(() => {
+      expect(hoverOverlay).toHaveAttribute("data-visible", "true")
+    })
+    expect(tooltip).toHaveAttribute("data-visible", "true")
+    expect(tooltip).toHaveAttribute("aria-hidden", "false")
+    expect(tooltip).toHaveTextContent("2000-01-03")
+    expect(tooltip.style.left).toBe("")
+    expect(tooltip.style.top).toBe("")
+    expect(tooltip.style.transform).toContain("translate3d")
+    expect(hoverOverlay.style.left).toBe("")
+    expect(hoverOverlay.style.top).toBe("")
+    expect(hoverOverlay.style.transform).toContain("translate3d")
 
-    expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
-    expect(hoverOverlay).toHaveAttribute("visibility", "hidden")
+    fireEvent.pointerLeave(canvas)
+
+    expect(hoverOverlay).toHaveAttribute("data-visible", "false")
+    expect(tooltip).toHaveAttribute("data-visible", "false")
+    expect(tooltip).toHaveAttribute("aria-hidden", "true")
+  })
+
+  it("does not repeatedly read canvas layout while moving across cached grid geometry", () => {
+    render(<DayVisualization cells={cells} stats={stats} />)
+
+    const canvas = screen.getByTestId("day-grid-canvas")
+    const dimensions = getDayGridDimensions(stats.expectancyYears)
+    const getBounds = vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      x: 100,
+      y: 100,
+      left: 100,
+      top: 100,
+      right: 100 + dimensions.width,
+      bottom: 100 + DAY_GRID.cellHeight,
+      width: dimensions.width,
+      height: DAY_GRID.cellHeight,
+      toJSON: () => {},
+    })
+
+    fireEvent.pointerEnter(canvas)
+    fireEvent.pointerMove(canvas, {
+      clientX: 100 + 0.5,
+      clientY: 101,
+    })
+    fireEvent.pointerMove(canvas, {
+      clientX: 100 + DAY_GRID.cellStepX + 0.5,
+      clientY: 101,
+    })
+
+    expect(getBounds).toHaveBeenCalledTimes(1)
+  })
+
+  it("clears the tooltip and overlay when hovering a gap", async () => {
+    render(<DayVisualization cells={cells} stats={stats} />)
+
+    const canvas = screen.getByTestId("day-grid-canvas")
+    const hoverOverlay = screen.getByTestId("day-cell-hover")
+    const tooltip = screen.getByTestId("day-cell-tooltip")
+    const dimensions = getDayGridDimensions(stats.expectancyYears)
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      x: 100,
+      y: 100,
+      left: 100,
+      top: 100,
+      right: 100 + dimensions.width,
+      bottom: 100 + DAY_GRID.cellHeight,
+      width: dimensions.width,
+      height: DAY_GRID.cellHeight,
+      toJSON: () => {},
+    })
+
+    fireEvent.pointerEnter(canvas)
+    fireEvent.pointerMove(canvas, {
+      clientX: 100 + 0.5,
+      clientY: 101,
+    })
+
+    await waitFor(() => {
+      expect(tooltip).toHaveAttribute("data-visible", "true")
+    })
+
+    fireEvent.pointerMove(canvas, {
+      clientX: 100 + DAY_GRID.cellWidth + 0.1,
+      clientY: 101,
+    })
+
+    expect(hoverOverlay).toHaveAttribute("data-visible", "false")
+    expect(tooltip).toHaveAttribute("data-visible", "false")
   })
 })

@@ -10,6 +10,22 @@ class ResizeObserverMock {
 
 globalThis.ResizeObserver = ResizeObserverMock
 
+Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+  writable: true,
+  value: vi.fn(() => ({
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    strokeRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    setTransform: vi.fn(),
+  })),
+})
+
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({
