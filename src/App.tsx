@@ -17,12 +17,17 @@ interface SubmittedInput {
 }
 
 export const EDITOR_DEBOUNCE_MS = 350
+export const ONBOARDING_REVEAL_DELAY_MS = 250
 
 interface AppProps {
   editorDebounceMs?: number
+  onboardingRevealDelayMs?: number
 }
 
-export default function App({ editorDebounceMs = EDITOR_DEBOUNCE_MS }: AppProps = {}) {
+export default function App({
+  editorDebounceMs = EDITOR_DEBOUNCE_MS,
+  onboardingRevealDelayMs = ONBOARDING_REVEAL_DELAY_MS,
+}: AppProps = {}) {
   const [birthDate, setBirthDate] = useState("")
   const [sex, setSex] = useState<BiologicalSex | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -108,9 +113,9 @@ export default function App({ editorDebounceMs = EDITOR_DEBOUNCE_MS }: AppProps 
       <OnboardingForm
         birthDate={birthDate}
         sex={sex}
-        error={activeInput ? null : error}
         dateIsValid={dateIsValid}
         submitted={Boolean(activeInput)}
+        revealDelayMs={onboardingRevealDelayMs}
         onBirthDateChange={handleBirthDateChange}
         onSexChange={setSex}
         onSubmit={handleSubmit}

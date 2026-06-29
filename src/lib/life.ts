@@ -56,6 +56,54 @@ export function parseBirthDate(input: string): ParsedBirthDate {
   return { ok: true, iso: trimmed }
 }
 
+export function formatBirthDateDisplayInput(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8)
+  const day = digits.slice(0, 2)
+  const month = digits.slice(2, 4)
+  const year = digits.slice(4, 8)
+
+  return [day, month, year].filter(Boolean).join("-")
+}
+
+export function parseDisplayBirthDate(input: string): ParsedBirthDate {
+  const trimmed = input.trim()
+
+  if (!/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+    return { ok: false, message: "Use DD-MM-YYYY." }
+  }
+
+  const [day, month, year] = trimmed.split("-").map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return { ok: false, message: "Enter a real calendar date." }
+  }
+
+  return {
+    ok: true,
+    iso: [
+      year.toString().padStart(4, "0"),
+      month.toString().padStart(2, "0"),
+      day.toString().padStart(2, "0"),
+    ].join("-"),
+  }
+}
+
+export function toDisplayBirthDate(iso: string): string {
+  const parsed = parseBirthDate(iso)
+
+  if (!parsed.ok) {
+    return ""
+  }
+
+  const [year, month, day] = parsed.iso.split("-")
+  return `${day}-${month}-${year}`
+}
+
 export function calculateLifeStats(input: LifeStatsInput): LifeStats {
   const expectancyYears = EXPECTANCY_YEARS[input.sex]
   const totalDays = expectancyYears * DAYS_PER_YEAR

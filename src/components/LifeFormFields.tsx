@@ -66,13 +66,21 @@ export function BiologicalSexField({
         aria-label="Biological sex"
         className="gap-3"
       >
-        <Field orientation="horizontal" className="gap-2">
+        <Field
+          orientation="horizontal"
+          data-selected={value === "male" ? "true" : undefined}
+          className="life-radio-option gap-2"
+        >
           <RadioGroupItem id={maleId} value="male" />
           <FieldLabel htmlFor={maleId} className="font-normal">
             Male
           </FieldLabel>
         </Field>
-        <Field orientation="horizontal" className="gap-2">
+        <Field
+          orientation="horizontal"
+          data-selected={value === "female" ? "true" : undefined}
+          className="life-radio-option gap-2"
+        >
           <RadioGroupItem id={femaleId} value="female" />
           <FieldLabel htmlFor={femaleId} className="font-normal">
             Female

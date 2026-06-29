@@ -28,10 +28,15 @@ const GAP_Y = 1.8
 const CELL_STEP_X = CELL_WIDTH + GAP_X
 const CELL_STEP_Y = CELL_HEIGHT + GAP_Y
 const PAST_CELL_PATTERN_ID = "past-cell-crosshatch"
+const TOOLTIP_DELAY_MS = 120
 
 export function DayVisualization({ cells, stats }: DayVisualizationProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
+  const activeCellRef = useRef<SVGRectElement | null>(null)
+  const activeDateRef = useRef<string | null>(null)
+  const pendingTooltipRef = useRef<HoveredCell | null>(null)
+  const tooltipTimeoutRef = useRef<number | null>(null)
   const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
 
   const dimensions = useMemo(() => {
@@ -68,12 +73,19 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
       .attr("height", CELL_HEIGHT)
       .attr("data-date", (cell) => cell.dateISO)
       .attr("data-status", (cell) => cell.status)
+      .attr("data-hovered", (cell) =>
+        cell.dateISO === activeDateRef.current ? "true" : null,
+      )
       .attr("fill", getCellFill)
       .attr("stroke", getCellStroke)
       .attr("stroke-width", getCellStrokeWidth)
       .attr("opacity", getCellOpacity)
       .on("pointerenter pointermove pointerleave", null)
   }, [cells, dimensions.height, dimensions.width])
+
+  useEffect(() => {
+    return () => clearTooltipTimeout()
+  }, [])
 
   function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
     const target = event.target
@@ -87,22 +99,69 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
     const dateISO = cell?.dataset.date
 
     if (!cell || !bounds || !dateISO) {
-      setHoveredCell(null)
+      clearHoverState()
       return
     }
 
-    setHoveredCell({
+    setActiveCell(cell)
+    scheduleTooltip({
       dateISO,
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     })
   }
 
+  function setActiveCell(cell: SVGRectElement) {
+    if (activeCellRef.current === cell) {
+      return
+    }
+
+    activeCellRef.current?.removeAttribute("data-hovered")
+    cell.setAttribute("data-hovered", "true")
+    activeCellRef.current = cell
+  }
+
+  function scheduleTooltip(nextHoveredCell: HoveredCell) {
+    pendingTooltipRef.current = nextHoveredCell
+
+    if (hoveredCell?.dateISO === nextHoveredCell.dateISO) {
+      setHoveredCell(nextHoveredCell)
+      return
+    }
+
+    if (activeDateRef.current === nextHoveredCell.dateISO) {
+      return
+    }
+
+    clearTooltipTimeout()
+    activeDateRef.current = nextHoveredCell.dateISO
+    tooltipTimeoutRef.current = window.setTimeout(() => {
+      setHoveredCell(pendingTooltipRef.current)
+      tooltipTimeoutRef.current = null
+    }, TOOLTIP_DELAY_MS)
+  }
+
+  function clearTooltipTimeout() {
+    if (tooltipTimeoutRef.current) {
+      window.clearTimeout(tooltipTimeoutRef.current)
+      tooltipTimeoutRef.current = null
+    }
+  }
+
+  function clearHoverState() {
+    clearTooltipTimeout()
+    activeCellRef.current?.removeAttribute("data-hovered")
+    activeCellRef.current = null
+    activeDateRef.current = null
+    pendingTooltipRef.current = null
+    setHoveredCell(null)
+  }
+
   return (
     <div
       className={cn(
         "absolute inset-0 flex items-center justify-center px-5 pb-8 pt-44 opacity-0 sm:pl-72 sm:pr-12 sm:pt-8 md:pl-80",
-        "animate-grid-reveal motion-reduce:animate-none motion-reduce:opacity-100",
+        "animate-grid-reveal [animation-delay:120ms] motion-reduce:animate-none motion-reduce:opacity-100",
       )}
     >
       <div
@@ -117,7 +176,7 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
           role="img"
           aria-label={`Life visualization with ${stats.totalDays.toLocaleString()} day cells.`}
           onPointerMove={handlePointerMove}
-          onPointerLeave={() => setHoveredCell(null)}
+          onPointerLeave={clearHoverState}
         >
           <defs>
             <pattern
@@ -146,7 +205,7 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
         </svg>
         {hoveredCell ? (
           <div
-            className="pointer-events-none absolute rounded-md border border-border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-sm"
+            className="pointer-events-none absolute animate-tooltip-reveal rounded-md border border-border/80 bg-popover/95 px-3 py-2 text-sm text-popover-foreground shadow-[0_14px_30px_hsl(var(--ring)/0.18),0_0_0_1px_hsl(var(--border)/0.36)]"
             style={{
               left: hoveredCell.x,
               top: hoveredCell.y,

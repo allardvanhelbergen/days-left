@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
 
 import { DayVisualization } from "@/components/DayVisualization"
 import type { DayCell, LifeStats } from "@/lib/life"
@@ -76,12 +76,14 @@ describe("DayVisualization", () => {
     expect(todayCell).toHaveAttribute("opacity", "1")
   })
 
-  it("shows and clears a tooltip through delegated SVG hover handling", async () => {
+  it("shows a delayed tooltip and clears it through delegated SVG hover handling", async () => {
     render(<DayVisualization cells={cells} stats={stats} />)
 
     await waitFor(() => {
       expect(document.querySelectorAll("rect.day-cell")).toHaveLength(cells.length)
     })
+
+    vi.useFakeTimers()
 
     const futureCell = document.querySelector('rect[data-date="2000-01-03"]')
     expect(futureCell).not.toBeNull()
@@ -91,10 +93,18 @@ describe("DayVisualization", () => {
       clientY: 140,
     })
 
+    expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
+    expect(futureCell).toHaveAttribute("data-hovered", "true")
+
+    act(() => vi.advanceTimersByTime(119))
+    expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(1))
     expect(screen.getByText("2000-01-03")).toBeInTheDocument()
 
     fireEvent.pointerLeave(screen.getByTestId("day-grid-svg"))
 
     expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
+    expect(futureCell).not.toHaveAttribute("data-hovered", "true")
   })
 })

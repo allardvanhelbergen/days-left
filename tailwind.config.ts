@@ -57,19 +57,47 @@ const config = {
           "sans-serif",
         ],
       },
+      transitionDuration: {
+        1800: "1800ms",
+      },
       keyframes: {
         "grid-reveal": {
-          "0%": { opacity: "0", transform: "translateY(10px) scale(0.985)" },
-          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+          "0%": {
+            opacity: "0",
+            transform: "translateY(18px) scale(0.982)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "translateY(0) scale(1)",
+          },
         },
         "question-reveal": {
-          "0%": { opacity: "0", transform: "translateY(8px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
+          "0%": {
+            opacity: "0",
+            transform: "translateY(10px)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+        },
+        "tooltip-reveal": {
+          "0%": {
+            opacity: "0",
+            filter: "blur(2px)",
+            translate: "0 4px",
+          },
+          "100%": {
+            opacity: "1",
+            filter: "blur(0)",
+            translate: "0 0",
+          },
         },
       },
       animation: {
-        "grid-reveal": "grid-reveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both",
-        "question-reveal": "question-reveal 360ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "grid-reveal": "grid-reveal 1400ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "question-reveal": "question-reveal 700ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "tooltip-reveal": "tooltip-reveal 260ms cubic-bezier(0.22, 1, 0.36, 1) both",
       },
     },
   },

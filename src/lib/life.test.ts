@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest"
 import {
   buildDayCells,
   calculateLifeStats,
+  formatBirthDateDisplayInput,
+  parseDisplayBirthDate,
   parseBirthDate,
+  toDisplayBirthDate,
   type DayCellStatus,
 } from "./life"
 
@@ -26,6 +29,37 @@ describe("parseBirthDate", () => {
       ok: false,
       message: "Enter a real calendar date.",
     })
+  })
+})
+
+describe("display birth dates", () => {
+  it("formats typed digits as DD-MM-YYYY", () => {
+    expect(formatBirthDateDisplayInput("12051990")).toBe("12-05-1990")
+    expect(formatBirthDateDisplayInput("12-05-1990")).toBe("12-05-1990")
+    expect(formatBirthDateDisplayInput("120")).toBe("12-0")
+    expect(formatBirthDateDisplayInput("12051990123")).toBe("12-05-1990")
+  })
+
+  it("parses valid display dates into ISO dates", () => {
+    expect(parseDisplayBirthDate("12-05-1990")).toEqual({
+      ok: true,
+      iso: "1990-05-12",
+    })
+  })
+
+  it("rejects non-display-format and impossible display dates", () => {
+    expect(parseDisplayBirthDate("1990-05-12")).toEqual({
+      ok: false,
+      message: "Use DD-MM-YYYY.",
+    })
+    expect(parseDisplayBirthDate("31-02-1990")).toEqual({
+      ok: false,
+      message: "Enter a real calendar date.",
+    })
+  })
+
+  it("converts ISO dates into display dates", () => {
+    expect(toDisplayBirthDate("1990-05-12")).toBe("12-05-1990")
   })
 })
 
