@@ -65,6 +65,14 @@ describe("App form flow", () => {
     expect(selectedRule).not.toContain("border-color:")
   })
 
+  it("keeps the background gradient static for snappier rendering", () => {
+    const css = readFileSync("src/index.css", "utf8")
+    const gradientRule = css.match(/\.app-gradient\s*\{(?<body>[^}]+)\}/)?.groups?.body
+
+    expect(gradientRule).toBeDefined()
+    expect(gradientRule).not.toContain("animation:")
+  })
+
   it("hides onboarding and shows a submit-free editor after initial submit", async () => {
     const user = userEvent.setup()
 

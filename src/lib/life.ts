@@ -119,8 +119,11 @@ export function calculateLifeStats(input: LifeStatsInput): LifeStats {
 }
 
 export function buildDayCells(stats: LifeStats): DayCell[] {
+  const date = toUTCDate(stats.birthDateISO)
+
   return Array.from({ length: stats.totalDays }, (_, index) => {
-    const dateISO = addDays(stats.birthDateISO, index)
+    const dateISO = toISODate(date)
+    date.setUTCDate(date.getUTCDate() + 1)
 
     return {
       index,
@@ -152,12 +155,6 @@ function getCellStatus(dateISO: string, todayISO: string): DayCellStatus {
 
 function daysBetween(startISO: string, endISO: string): number {
   return Math.round((toUTCDate(endISO).getTime() - toUTCDate(startISO).getTime()) / MS_PER_DAY)
-}
-
-function addDays(startISO: string, days: number): string {
-  const date = toUTCDate(startISO)
-  date.setUTCDate(date.getUTCDate() + days)
-  return toISODate(date)
 }
 
 function toUTCDate(iso: string): Date {

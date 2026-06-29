@@ -33,9 +33,11 @@ const TOOLTIP_DELAY_MS = 120
 export function DayVisualization({ cells, stats }: DayVisualizationProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
-  const activeCellRef = useRef<SVGRectElement | null>(null)
+  const hoverOverlayRef = useRef<SVGRectElement | null>(null)
+  const tooltipRef = useRef<HTMLDivElement | null>(null)
   const activeDateRef = useRef<string | null>(null)
   const pendingTooltipRef = useRef<HoveredCell | null>(null)
+  const tooltipPositionRef = useRef({ x: 0, y: 0 })
   const tooltipTimeoutRef = useRef<number | null>(null)
   const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null)
 
@@ -73,9 +75,6 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
       .attr("height", CELL_HEIGHT)
       .attr("data-date", (cell) => cell.dateISO)
       .attr("data-status", (cell) => cell.status)
-      .attr("data-hovered", (cell) =>
-        cell.dateISO === activeDateRef.current ? "true" : null,
-      )
       .attr("fill", getCellFill)
       .attr("stroke", getCellStroke)
       .attr("stroke-width", getCellStrokeWidth)
@@ -103,22 +102,40 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
       return
     }
 
-    setActiveCell(cell)
-    scheduleTooltip({
+    moveHoverOverlay(cell)
+    updateTooltipPosition({
       dateISO,
       x: event.clientX - bounds.left,
       y: event.clientY - bounds.top,
     })
   }
 
-  function setActiveCell(cell: SVGRectElement) {
-    if (activeCellRef.current === cell) {
+  function moveHoverOverlay(cell: SVGRectElement) {
+    const hoverOverlay = hoverOverlayRef.current
+
+    if (!hoverOverlay) {
       return
     }
 
-    activeCellRef.current?.removeAttribute("data-hovered")
-    cell.setAttribute("data-hovered", "true")
-    activeCellRef.current = cell
+    hoverOverlay.setAttribute("x", cell.getAttribute("x") ?? "0")
+    hoverOverlay.setAttribute("y", cell.getAttribute("y") ?? "0")
+    hoverOverlay.setAttribute("width", cell.getAttribute("width") ?? `${CELL_WIDTH}`)
+    hoverOverlay.setAttribute("height", cell.getAttribute("height") ?? `${CELL_HEIGHT}`)
+    hoverOverlay.setAttribute("visibility", "visible")
+  }
+
+  function updateTooltipPosition(nextHoveredCell: HoveredCell) {
+    tooltipPositionRef.current = {
+      x: nextHoveredCell.x,
+      y: nextHoveredCell.y,
+    }
+
+    if (tooltipRef.current) {
+      tooltipRef.current.style.left = `${nextHoveredCell.x}px`
+      tooltipRef.current.style.top = `${nextHoveredCell.y}px`
+    }
+
+    scheduleTooltip(nextHoveredCell)
   }
 
   function scheduleTooltip(nextHoveredCell: HoveredCell) {
@@ -150,8 +167,7 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
 
   function clearHoverState() {
     clearTooltipTimeout()
-    activeCellRef.current?.removeAttribute("data-hovered")
-    activeCellRef.current = null
+    hoverOverlayRef.current?.setAttribute("visibility", "hidden")
     activeDateRef.current = null
     pendingTooltipRef.current = null
     setHoveredCell(null)
@@ -202,13 +218,29 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
             </pattern>
           </defs>
           <g className="day-grid" />
+          <rect
+            ref={hoverOverlayRef}
+            data-testid="day-cell-hover"
+            className="day-cell-hover"
+            x={0}
+            y={0}
+            width={CELL_WIDTH}
+            height={CELL_HEIGHT}
+            rx={0.28}
+            visibility="hidden"
+            fill="hsl(var(--popover) / 0.36)"
+            stroke="hsl(var(--life-today-border))"
+            strokeWidth={0.9}
+            pointerEvents="none"
+          />
         </svg>
         {hoveredCell ? (
           <div
+            ref={tooltipRef}
             className="pointer-events-none absolute animate-tooltip-reveal rounded-md border border-border/80 bg-popover/95 px-3 py-2 text-sm text-popover-foreground shadow-[0_14px_30px_hsl(var(--ring)/0.18),0_0_0_1px_hsl(var(--border)/0.36)]"
             style={{
-              left: hoveredCell.x,
-              top: hoveredCell.y,
+              left: tooltipPositionRef.current.x,
+              top: tooltipPositionRef.current.y,
               transform: "translate(-50%, calc(-100% - 0.75rem))",
             }}
           >

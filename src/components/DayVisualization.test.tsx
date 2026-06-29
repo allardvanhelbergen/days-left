@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { readFileSync } from "node:fs"
 import { describe, expect, it, vi } from "vitest"
 
 import { DayVisualization } from "@/components/DayVisualization"
@@ -40,6 +41,16 @@ const stats: LifeStats = {
 }
 
 describe("DayVisualization", () => {
+  it("keeps day-cell CSS static and cheap for large grids", () => {
+    const css = readFileSync("src/index.css", "utf8")
+    const dayCellRule = css.match(/\.day-cell\s*\{(?<body>[^}]+)\}/)?.groups?.body
+
+    expect(dayCellRule).toBeDefined()
+    expect(dayCellRule).not.toContain("transition")
+    expect(dayCellRule).not.toContain("filter")
+    expect(dayCellRule).not.toContain("transform")
+  })
+
   it("renders cells at final opacity without a per-cell reveal setup", async () => {
     render(<DayVisualization cells={cells} stats={stats} />)
 
@@ -86,7 +97,9 @@ describe("DayVisualization", () => {
     vi.useFakeTimers()
 
     const futureCell = document.querySelector('rect[data-date="2000-01-03"]')
+    const hoverOverlay = screen.getByTestId("day-cell-hover")
     expect(futureCell).not.toBeNull()
+    expect(hoverOverlay).toHaveAttribute("visibility", "hidden")
 
     fireEvent.pointerMove(futureCell as Element, {
       clientX: 120,
@@ -94,7 +107,10 @@ describe("DayVisualization", () => {
     })
 
     expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
-    expect(futureCell).toHaveAttribute("data-hovered", "true")
+    expect(futureCell).not.toHaveAttribute("data-hovered", "true")
+    expect(hoverOverlay).toHaveAttribute("visibility", "visible")
+    expect(hoverOverlay).toHaveAttribute("x", "3.1")
+    expect(hoverOverlay).toHaveAttribute("y", "0")
 
     act(() => vi.advanceTimersByTime(119))
     expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
@@ -105,6 +121,6 @@ describe("DayVisualization", () => {
     fireEvent.pointerLeave(screen.getByTestId("day-grid-svg"))
 
     expect(screen.queryByText("2000-01-03")).not.toBeInTheDocument()
-    expect(futureCell).not.toHaveAttribute("data-hovered", "true")
+    expect(hoverOverlay).toHaveAttribute("visibility", "hidden")
   })
 })
