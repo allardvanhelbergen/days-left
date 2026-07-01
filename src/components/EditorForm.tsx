@@ -23,10 +23,10 @@ export function EditorForm({
   return (
     <form
       data-testid="editor-form"
-      className="absolute left-4 top-4 z-10 w-[min(14rem,calc(100vw-2rem))] animate-question-reveal sm:left-8 sm:top-8"
+      className="absolute left-4 top-4 z-10 w-[min(12rem,calc(100vw-2rem))] animate-question-reveal sm:left-8 sm:top-8"
       onSubmit={(event) => event.preventDefault()}
     >
-      <FieldGroup className="gap-5">
+      <FieldGroup className="gap-3">
         <DateOfBirthField
           id="editor-birth-date"
           value={birthDate}

@@ -44,15 +44,15 @@ interface HoverRender {
 const statusLegendItems = [
   {
     label: "Past",
-    className: "bg-[hsl(var(--life-past))] opacity-70",
-  },
-  {
-    label: "Future",
-    className: "bg-[hsl(var(--life-future))] shadow-[0_0_0_1px_hsl(var(--border)/0.18)]",
+    className: "bg-[hsl(var(--life-past))] opacity-70 shadow-[0_0_0_1px_hsl(var(--border)/0.18)]",
   },
   {
     label: "Today",
     className: "bg-[hsl(var(--life-today))]",
+  },
+  {
+    label: "Future",
+    className: "bg-[hsl(var(--life-future))] shadow-[0_0_0_1px_hsl(var(--border)/0.18)]",
   },
 ] as const
 
@@ -271,13 +271,13 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
       <div
         data-testid="day-status-legend"
         aria-label="Day cell status legend"
-        className="pointer-events-none absolute bottom-5 left-5 z-10 flex flex-col gap-2 text-sm font-medium text-foreground/90 sm:bottom-8 sm:left-8"
+        className="pointer-events-none absolute bottom-5 left-5 z-10 flex flex-col gap-1.5 text-xs font-medium leading-none text-foreground/90 sm:bottom-8 sm:left-8"
       >
         {statusLegendItems.map((item) => (
-          <div key={item.label} className="flex items-center gap-3">
+          <div key={item.label} className="flex items-center gap-2">
             <span
               data-testid="day-status-swatch"
-              className={cn("block size-4 rounded-[3px]", item.className)}
+              className={cn("block size-3 rounded-[2px]", item.className)}
               aria-hidden="true"
             />
             <span>{item.label}</span>
@@ -310,7 +310,7 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
           data-testid="day-cell-tooltip"
           data-visible="false"
           aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-0 rounded-md border border-border/80 bg-popover/95 px-3 py-2 text-sm text-popover-foreground opacity-0 shadow-[0_10px_22px_hsl(var(--ring)/0.14),0_0_0_1px_hsl(var(--border)/0.36)] transition-opacity duration-75 will-change-transform data-[visible=true]:opacity-100"
+          className="pointer-events-none absolute left-0 top-0 flex h-8 w-[7.5rem] items-center justify-center whitespace-nowrap rounded-md border border-border/80 bg-popover/95 px-3 text-sm tabular-nums text-popover-foreground opacity-0 shadow-[0_10px_22px_hsl(var(--ring)/0.14),0_0_0_1px_hsl(var(--border)/0.36)] transition-opacity duration-75 will-change-transform data-[visible=true]:opacity-100"
         />
       </div>
     </div>

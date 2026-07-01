@@ -16,8 +16,17 @@ interface SubmittedInput {
   sex: BiologicalSex
 }
 
+interface UrlLifeInputState {
+  birthDate: string
+  sex: BiologicalSex | null
+  activeInput: SubmittedInput | null
+}
+
 export const EDITOR_DEBOUNCE_MS = 350
 export const ONBOARDING_REVEAL_DELAY_MS = 250
+
+const BIRTH_DATE_SEARCH_PARAM = "dob"
+const SEX_SEARCH_PARAM = "sex"
 
 interface AppProps {
   editorDebounceMs?: number
@@ -28,10 +37,13 @@ export default function App({
   editorDebounceMs = EDITOR_DEBOUNCE_MS,
   onboardingRevealDelayMs = ONBOARDING_REVEAL_DELAY_MS,
 }: AppProps = {}) {
-  const [birthDate, setBirthDate] = useState("")
-  const [sex, setSex] = useState<BiologicalSex | null>(null)
+  const initialUrlState = useMemo(readLifeInputStateFromUrl, [])
+  const [birthDate, setBirthDate] = useState(initialUrlState.birthDate)
+  const [sex, setSex] = useState<BiologicalSex | null>(initialUrlState.sex)
   const [error, setError] = useState<string | null>(null)
-  const [activeInput, setActiveInput] = useState<SubmittedInput | null>(null)
+  const [activeInput, setActiveInput] = useState<SubmittedInput | null>(
+    initialUrlState.activeInput,
+  )
 
   const parsedBirthDate = useMemo(() => parseBirthDate(birthDate), [birthDate])
   const dateIsValid = parsedBirthDate.ok
@@ -52,6 +64,29 @@ export default function App({
   const cells = useMemo(() => (stats ? buildDayCells(stats) : []), [stats])
 
   const hasActiveInput = Boolean(activeInput)
+
+  useEffect(() => {
+    if (!activeInput) {
+      return
+    }
+
+    writeLifeInputStateToUrl(activeInput)
+  }, [activeInput])
+
+  useEffect(() => {
+    function handlePopState() {
+      const nextUrlState = readLifeInputStateFromUrl()
+
+      setBirthDate(nextUrlState.birthDate)
+      setSex(nextUrlState.sex)
+      setError(null)
+      setActiveInput(nextUrlState.activeInput)
+    }
+
+    window.addEventListener("popstate", handlePopState)
+
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [])
 
   useEffect(() => {
     if (!hasActiveInput) {
@@ -132,4 +167,60 @@ export default function App({
       {stats ? <DayVisualization cells={cells} stats={stats} /> : null}
     </main>
   )
+}
+
+function readLifeInputStateFromUrl(): UrlLifeInputState {
+  if (typeof window === "undefined") {
+    return { birthDate: "", sex: null, activeInput: null }
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  const parsedBirthDate = parseBirthDate(
+    params.get(BIRTH_DATE_SEARCH_PARAM) ?? "",
+  )
+  const sex = parseBiologicalSex(params.get(SEX_SEARCH_PARAM))
+  const birthDate = parsedBirthDate.ok ? parsedBirthDate.iso : ""
+
+  return {
+    birthDate,
+    sex,
+    activeInput:
+      parsedBirthDate.ok && sex
+        ? { birthDateISO: parsedBirthDate.iso, sex }
+        : null,
+  }
+}
+
+function writeLifeInputStateToUrl(input: SubmittedInput) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  params.set(BIRTH_DATE_SEARCH_PARAM, input.birthDateISO)
+  params.set(SEX_SEARCH_PARAM, input.sex)
+
+  const nextSearch = params.toString()
+  const nextUrl = [
+    window.location.pathname,
+    nextSearch ? `?${nextSearch}` : "",
+    window.location.hash,
+  ].join("")
+  const currentUrl = [
+    window.location.pathname,
+    window.location.search,
+    window.location.hash,
+  ].join("")
+
+  if (nextUrl !== currentUrl) {
+    window.history.replaceState(null, "", nextUrl)
+  }
+}
+
+function parseBiologicalSex(value: string | null): BiologicalSex | null {
+  if (value === "male" || value === "female") {
+    return value
+  }
+
+  return null
 }

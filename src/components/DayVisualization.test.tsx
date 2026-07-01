@@ -57,17 +57,29 @@ describe("DayVisualization", () => {
     expect(tooltip).toHaveAttribute("data-visible", "false")
     expect(tooltip).toHaveAttribute("aria-hidden", "true")
     expect(tooltip).toHaveTextContent("")
+    expect(tooltip).toHaveClass("h-8", "w-[7.5rem]", "whitespace-nowrap")
   })
 
   it("renders a compact status legend for the filled day cells", () => {
     render(<DayVisualization cells={cells} stats={stats} />)
 
     const legend = screen.getByTestId("day-status-legend")
+    const legendLabels = Array.from(legend.querySelectorAll("span:last-child")).map(
+      (label) => label.textContent,
+    )
 
     expect(legend).toHaveTextContent("Past")
     expect(legend).toHaveTextContent("Future")
     expect(legend).toHaveTextContent("Today")
+    expect(legend).toHaveClass("gap-1.5", "text-xs")
+    expect(legendLabels).toEqual(["Past", "Today", "Future"])
     expect(legend.querySelectorAll("[data-testid='day-status-swatch']")).toHaveLength(3)
+    const swatches = screen.getAllByTestId("day-status-swatch")
+    expect(swatches[0]).toHaveClass(
+      "size-3",
+      "shadow-[0_0_0_1px_hsl(var(--border)/0.18)]",
+    )
+    expect(swatches[2]).toHaveClass("shadow-[0_0_0_1px_hsl(var(--border)/0.18)]")
     expect(document.querySelectorAll("rect.day-cell")).toHaveLength(0)
   })
 

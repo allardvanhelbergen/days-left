@@ -29,12 +29,13 @@ export function DateOfBirthField({
   onChange,
 }: DateOfBirthFieldProps) {
   return (
-    <Field data-invalid={Boolean(error)}>
-      <FieldLabel htmlFor={id} className="leading-5">
-        Date of birth
+    <Field data-invalid={Boolean(error)} className="gap-2">
+      <FieldLabel htmlFor={id} className="text-xs leading-4">
+        DOB
       </FieldLabel>
       <Input
         id={id}
+        className="h-8 px-2 text-sm"
         inputMode="numeric"
         placeholder="YYYY-MM-DD"
         value={value}
@@ -56,34 +57,34 @@ export function BiologicalSexField({
   const femaleId = `${idPrefix}-female`
 
   return (
-    <FieldSet className="gap-3">
-      <FieldLegend variant="label" className="mb-3">
-        Biological sex
+    <FieldSet className="gap-2">
+      <FieldLegend variant="label" className="mb-2 text-xs">
+        Sex
       </FieldLegend>
       <RadioGroup
         value={value ?? ""}
         onValueChange={(nextValue) => onChange(nextValue as BiologicalSex)}
-        aria-label="Biological sex"
-        className="gap-3"
+        aria-label="Sex"
+        className="flex flex-row items-center gap-2"
       >
         <Field
           orientation="horizontal"
           data-selected={value === "male" ? "true" : undefined}
-          className="life-radio-option gap-2"
+          className="life-radio-option life-radio-option-compact !w-auto gap-1.5 [&>[data-slot=field-label]]:flex-none"
         >
           <RadioGroupItem id={maleId} value="male" />
           <FieldLabel htmlFor={maleId} className="font-normal">
-            Male
+            M
           </FieldLabel>
         </Field>
         <Field
           orientation="horizontal"
           data-selected={value === "female" ? "true" : undefined}
-          className="life-radio-option gap-2"
+          className="life-radio-option life-radio-option-compact !w-auto gap-1.5 [&>[data-slot=field-label]]:flex-none"
         >
           <RadioGroupItem id={femaleId} value="female" />
           <FieldLabel htmlFor={femaleId} className="font-normal">
-            Female
+            F
           </FieldLabel>
         </Field>
       </RadioGroup>
