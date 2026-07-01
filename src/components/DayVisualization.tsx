@@ -283,6 +283,20 @@ export function DayVisualization({ cells, stats }: DayVisualizationProps) {
             <span>{item.label}</span>
           </div>
         ))}
+        <div className="mt-3 flex flex-col gap-1 text-[0.68rem] font-normal leading-snug text-foreground/70">
+          <span>
+            Inspired by{" "}
+            <a
+              href="https://xkcd.com/1577/"
+              target="_blank"
+              rel="noreferrer"
+              className="pointer-events-auto underline underline-offset-2 transition-colors hover:text-foreground"
+            >
+              xkcd.com/1577
+            </a>
+          </span>
+          <span>Created by Allard van Helbergen</span>
+        </div>
       </div>
       <div
         ref={wrapRef}

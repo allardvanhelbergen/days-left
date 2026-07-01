@@ -64,8 +64,9 @@ describe("DayVisualization", () => {
     render(<DayVisualization cells={cells} stats={stats} />)
 
     const legend = screen.getByTestId("day-status-legend")
-    const legendLabels = Array.from(legend.querySelectorAll("span:last-child")).map(
-      (label) => label.textContent,
+    const swatches = screen.getAllByTestId("day-status-swatch")
+    const legendLabels = swatches.map(
+      (swatch) => swatch.nextElementSibling?.textContent,
     )
 
     expect(legend).toHaveTextContent("Past")
@@ -74,13 +75,25 @@ describe("DayVisualization", () => {
     expect(legend).toHaveClass("gap-1.5", "text-xs")
     expect(legendLabels).toEqual(["Past", "Today", "Future"])
     expect(legend.querySelectorAll("[data-testid='day-status-swatch']")).toHaveLength(3)
-    const swatches = screen.getAllByTestId("day-status-swatch")
     expect(swatches[0]).toHaveClass(
       "size-3",
       "shadow-[0_0_0_1px_hsl(var(--border)/0.18)]",
     )
     expect(swatches[2]).toHaveClass("shadow-[0_0_0_1px_hsl(var(--border)/0.18)]")
     expect(document.querySelectorAll("rect.day-cell")).toHaveLength(0)
+  })
+
+  it("renders attribution below the status legend", () => {
+    render(<DayVisualization cells={cells} stats={stats} />)
+
+    const legend = screen.getByTestId("day-status-legend")
+    const xkcdLink = screen.getByRole("link", { name: "xkcd.com/1577" })
+
+    expect(legend).toHaveTextContent("Inspired by xkcd.com/1577")
+    expect(legend).toHaveTextContent("Created by Allard van Helbergen")
+    expect(xkcdLink).toHaveAttribute("href", "https://xkcd.com/1577/")
+    expect(xkcdLink).toHaveAttribute("target", "_blank")
+    expect(xkcdLink).toHaveAttribute("rel", "noreferrer")
   })
 
   it("shows an immediate transform-positioned tooltip through math-based canvas hover handling", async () => {
